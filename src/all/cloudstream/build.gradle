@@ -1,0 +1,23 @@
+ext {
+    extName = 'CloudStream'
+    extClass = '.CloudStreamFactory'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+
+
+dependencies {
+
+    // This makes com.lagradost.cloudstream3.* classes available
+//    cloudstream("com.lagradost:cloudstream3:pre-release")
+
+    // NiceHttp (match CS3 app)
+    implementation "com.github.Blatzar:NiceHttp:0.4.13"
+
+    // Jackson (IMPORTANT: Cloudstream uses 2.13.1, don’t go higher!)
+    implementation "com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1"
+}
+
+//apply plugin: "com.lagradost.cloudstream3.gradle"

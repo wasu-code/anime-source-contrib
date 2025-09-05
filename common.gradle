@@ -101,6 +101,7 @@ dependencies {
     if (theme != null) implementation(theme) // Overrides core launcher icons
     implementation(project(":core"))
     compileOnly(libs.bundles.common)
+    implementation 'com.github.recloudstream.gradle:com.lagradost.cloudstream3.gradle.gradle.plugin:-SNAPSHOT'
 }
 
 configurations.all {

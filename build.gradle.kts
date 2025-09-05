@@ -3,6 +3,8 @@ buildscript {
         mavenCentral()
         google()
         maven(url = "https://plugins.gradle.org/m2/")
+        // repo which contains Cloudstream's tools and dependencies
+        maven("https://jitpack.io")
     }
     dependencies {
         classpath(libs.gradle.agp)
