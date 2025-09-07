@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.all.cloudstream
 
 import android.app.Application
+import com.lagradost.cloudstream3.MainAPI
 import dalvik.system.DexClassLoader
 import dalvik.system.DexFile
 import eu.kanade.tachiyomi.animesource.AnimeSource
