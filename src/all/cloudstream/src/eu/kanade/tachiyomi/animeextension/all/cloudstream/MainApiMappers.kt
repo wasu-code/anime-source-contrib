@@ -2,9 +2,17 @@ package eu.kanade.tachiyomi.animeextension.all.cloudstream
 
 import com.lagradost.cloudstream3.AnimeLoadResponse
 import com.lagradost.cloudstream3.Episode
+import com.lagradost.cloudstream3.HomePageList
+import com.lagradost.cloudstream3.HomePageResponse
+import com.lagradost.cloudstream3.LiveStreamLoadResponse
 import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SearchResponseList
+import com.lagradost.cloudstream3.ShowStatus
+import com.lagradost.cloudstream3.TorrentLoadResponse
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
+import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 
@@ -25,7 +33,20 @@ fun LoadResponse.toSAnime(): SAnime {
         title = name
         url = this@toSAnime.url
         thumbnail_url = posterUrl
+        description = plot
+        status = when (this@toSAnime) {
+            is AnimeLoadResponse -> showStatus?.toStatus() ?: SAnime.UNKNOWN
+            is TvSeriesLoadResponse  -> showStatus?.toStatus() ?: SAnime.UNKNOWN
+            else -> {SAnime.UNKNOWN}
+        }
         initialized = true
+    }
+}
+
+fun ShowStatus.toStatus(): Int {
+    return when (this) {
+        ShowStatus.Ongoing -> SAnime.ONGOING
+        ShowStatus.Completed -> SAnime.COMPLETED
     }
 }
 
@@ -47,8 +68,32 @@ fun LoadResponse.toSEpisodeList(): List<SEpisode> {
             }
         }
 
+        is MovieLoadResponse -> listOf(
+            SEpisode.create().apply {
+                name = "Movie"
+                url = dataUrl
+            }
+        )
+
+        //TODO
+//        is TorrentLoadResponse
+//        is LiveStreamLoadResponse
         else -> emptyList()
     }
+}
+
+fun HomePageResponse.toAnimePage(): AnimesPage {
+    return AnimesPage(
+        animes = items.flatMap { it.list }.map { it.toSAnime() },
+        hasNextPage = hasNext
+    )
+}
+
+fun SearchResponseList.toAnimePage(): AnimesPage {
+    return AnimesPage(
+        animes = items.map { it.toSAnime() },
+        hasNextPage = hasNext
+    )
 }
 
 // fun ExtractorLink.toVideo(): Video {
