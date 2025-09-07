@@ -6,6 +6,8 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
+import eu.kanade.tachiyomi.animesource.model.Track
+import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import kotlinx.coroutines.runBlocking
@@ -78,19 +80,24 @@ class MainApiAnimeHttpSourceAdapter(
     override fun episodeListParse(response: Response): List<SEpisode> = throw UnsupportedOperationException()
 
     // === Video Streams ===
-//    override fun videoListParse(response: Response): List<Video> {
-//        val url = response.request.url.toString()
-//        val videos = mutableListOf<Video>()
-//        runBlocking {
-//            api.loadLinks(
-//                url,
-//                isCasting = false,
-//                subtitleCallback = { /* ignore for now */ },
-//                callback = { extractorLink ->
-//                    videos.add(extractorLink.toVideo())
-//                }
-//            )
-//        }
-//        return videos
-//    }
+
+    override suspend fun getVideoList(episode: SEpisode): List<Video> {
+        val videos = mutableListOf<Video>()
+        val subs = mutableListOf<Track>()
+        runBlocking {
+            api.loadLinks(
+                episode.url,
+                isCasting = false,
+                subtitleCallback = { subtitleFile ->
+                    subs.add(subtitleFile.toTrack())
+                },
+                callback = { extractorLink ->
+                    videos.add(extractorLink.toVideo())
+                }
+            )
+        }
+        return videos
+    }
+
+    override fun videoListParse(response: Response): List<Video> = throw UnsupportedOperationException()
 }

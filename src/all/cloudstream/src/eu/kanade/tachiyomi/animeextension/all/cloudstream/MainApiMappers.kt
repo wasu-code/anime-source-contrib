@@ -10,11 +10,16 @@ import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.SearchResponseList
 import com.lagradost.cloudstream3.ShowStatus
+import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TorrentLoadResponse
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
+import com.lagradost.cloudstream3.utils.ExtractorLink
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
+import eu.kanade.tachiyomi.animesource.model.Track
+import eu.kanade.tachiyomi.animesource.model.Video
+import okhttp3.Headers.Companion.toHeaders
 
 /**
  * Mapping extensions between Cloudstream MainAPI models and Tachiyomi anime models.
@@ -96,11 +101,18 @@ fun SearchResponseList.toAnimePage(): AnimesPage {
     )
 }
 
-// fun ExtractorLink.toVideo(): Video {
-//    return Video(
-//        url = url,
-//        quality = quality.toString(),
-//        videoUrl = url,
-//        headers = headers ?: emptyMap()
-//    )
-// }
+ fun ExtractorLink.toVideo(): Video {
+    return Video(
+        url = url,
+        quality = quality.toString(),
+        videoUrl = url,
+        headers = headers.toHeaders()
+    )
+ }
+
+fun SubtitleFile.toTrack(): Track {
+    return Track(
+        url = url,
+        lang = lang
+    )
+}

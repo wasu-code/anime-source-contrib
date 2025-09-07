@@ -15,6 +15,7 @@ import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.loadExtractor
 
 class DailymotionProvider : MainAPI() {
 
@@ -100,11 +101,11 @@ class DailymotionProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-//        loadExtractor(
-//            "https://www.dailymotion.com/embed/video/$data",
-//            subtitleCallback,
-//            callback
-//        )
+        loadExtractor(
+            "https://www.dailymotion.com/embed/video/$data",
+            subtitleCallback,
+            callback
+        )
         return true
     }
 }
