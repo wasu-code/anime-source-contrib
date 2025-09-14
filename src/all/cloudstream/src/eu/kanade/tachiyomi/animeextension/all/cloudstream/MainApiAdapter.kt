@@ -9,16 +9,15 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
-import eu.kanade.tachiyomi.network.GET
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import okhttp3.Response
 
 /**
  * Adapter: Wraps a Cloudstream MainAPI provider so it can be used
- * as a Tachiyomi AnimeHttpSource at runtime.
+ * as a Aniyomi AnimeHttpSource at runtime.
  */
-class MainApiAnimeHttpSourceAdapter(
+class MainApiAdapter(
     private val api: MainAPI,
 ) : AnimeHttpSource() {
 
