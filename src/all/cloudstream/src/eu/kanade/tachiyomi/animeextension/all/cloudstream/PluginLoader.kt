@@ -18,30 +18,30 @@ object PluginLoader {
     private const val PLUGIN_FOLDER = "cloudstream"
     private val handler by lazy { Handler(Looper.getMainLooper()) }
 
-    private fun copyIfNeeded(src: File, dest: File) {
-        if (!dest.exists() ||
-            src.length() != dest.length() ||
-            src.lastModified() != dest.lastModified()
-        ) {
-            // Make it writable if it exists
-            if (dest.exists() && !dest.canWrite()) {
-                dest.setWritable(true)
-            }
+//    private fun copyIfNeeded(src: File, dest: File) {
+//        if (!dest.exists() ||
+//            src.length() != dest.length() ||
+//            src.lastModified() != dest.lastModified()
+//        ) {
+//            // Make it writable if it exists
+//            if (dest.exists() && !dest.canWrite()) {
+//                dest.setWritable(true)
+//            }
+//
+//            src.copyTo(dest, overwrite = true)
+//            dest.setLastModified(src.lastModified())
+//        }
+//        // Make sure file is read-only (for Android 14+ to read dex files)
+//        dest.setReadOnly()
+//    }
 
-            src.copyTo(dest, overwrite = true)
-            dest.setLastModified(src.lastModified())
-        }
-        // Make sure file is read-only (for Android 14+ to read dex files)
-        dest.setReadOnly()
-    }
-
-    private fun loadPlugin(context: Application, file: File) {
+    fun loadPlugin(context: Application, file: File): Boolean {
         try {
             // Pass extension's classloader as parent (not Aniyomi's) so Cloudstream core classes
             // (like BasePlugin, MainAPI) that are bundled in this library are available
             val loader = PathClassLoader(file.absolutePath, this::class.java.classLoader)
             loader.getResourceAsStream("manifest.json").use { stream ->
-                if (stream == null) return
+                if (stream == null) return false
                 InputStreamReader(stream).use { reader ->
                     val manifest = parseJson(reader, BasePlugin.Manifest::class.java)
                     val pluginClass = loader.loadClass(manifest.pluginClassName)
@@ -52,10 +52,12 @@ object PluginLoader {
                         handler.post {
                             Toast.makeText(context, "Plugin ${manifest.name} not yet supported", Toast.LENGTH_SHORT).show()
                         }
-                        //pluginInstance.load(context) // Not sure what to pass here and how it is used
+//                        pluginInstance.load(context) // skip openSettings here
+                        return false
                     } else {
                         pluginInstance.load()
                     }
+                    return true
                 }
             }
         } catch (e: Throwable) {
@@ -63,20 +65,21 @@ object PluginLoader {
             Log.d("CloudStream", "Failed to load $file")
             e.printStackTrace()
         }
+        return false
     }
 
     fun loadAllPlugins(context: Application): List<MainAPI> {
-        val externalDir = File(context.getExternalFilesDir(null), PLUGIN_FOLDER)
+//        val externalDir = File(context.getExternalFilesDir(null), PLUGIN_FOLDER)
         val internalDir = File(context.filesDir, PLUGIN_FOLDER)
         if (!internalDir.exists()) internalDir.mkdirs()
 
-        val pluginFiles = externalDir.listFiles { f -> f.extension == "cs3" } ?: emptyArray()
+        val pluginFiles = internalDir.listFiles { f -> f.extension == "cs3" } ?: emptyArray()
 
         Log.d("CloudStream", "Found ${pluginFiles.size} plugins")
 
         pluginFiles.forEach { src ->
             val dest = File(internalDir, src.name)
-            copyIfNeeded(src, dest)
+//            copyIfNeeded(src, dest)
             loadPlugin(context,dest)
         }
 
