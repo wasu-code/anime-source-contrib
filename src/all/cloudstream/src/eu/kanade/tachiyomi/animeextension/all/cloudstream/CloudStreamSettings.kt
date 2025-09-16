@@ -85,12 +85,16 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             dialogTitle = "Check/uncheck plugins to install/uninstall"
             setEnabled(false)
             setOnPreferenceChangeListener { pref, newValue ->
+                preferences.edit()
+                    .putStringSet(pref.key, newValue as Set<String>)
+                    .commit() // save now because app restarts later
+
                 val selected = newValue as Set<String>
                 val oldSelected = (pref as MultiSelectListPreference).values
                 val removed = oldSelected - selected
                 val added = selected - oldSelected
 
-                // Disable temporarily (avoid double taps)
+                // Disable temporarily
                 pref.setEnabled(false)
 
                 val scope = CoroutineScope(Dispatchers.IO)
