@@ -1,7 +1,10 @@
 package eu.kanade.tachiyomi.animeextension.all.cloudstream
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.Application
+import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.widget.Toast
 import androidx.preference.EditTextPreference
@@ -56,7 +59,6 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             summary = "Loading..."
             dialogTitle = "Check/uncheck plugins to install/uninstall"
             setEnabled(false)
-            setOnPreferenceChangeListener {pref, newValue -> true}
             setOnPreferenceChangeListener { pref, newValue ->
                 val selected = newValue as Set<String>
                 val oldSelected = (pref as MultiSelectListPreference).values
@@ -72,7 +74,7 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
                     // Install
                     added.forEach { pluginUrl ->
                         val pluginFile = PluginManager.downloadPluginToFile(pluginUrl)
-                        // validate if plugin loads and remove if not
+                        // validate if plugin loads
                         if (pluginFile != null) {
                             PluginLoader.loadPlugin(context, pluginFile)
                         }
@@ -86,6 +88,7 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(context, "Installed ${added.size}, removed ${removed.size} plugins", Toast.LENGTH_SHORT).show()
                         setEnabled(true)
+                        restartApp(context)
                     }
                 }
                 true
@@ -119,8 +122,10 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             title = "Purge all plugin files"
             setDefaultValue(false)
             setOnPreferenceClickListener { pref ->
-                val scope = CoroutineScope(Dispatchers.IO)
+                val switchPref = pref as SwitchPreferenceCompat
+                switchPref.isChecked = false
 
+                val scope = CoroutineScope(Dispatchers.IO)
                 scope.launch {
                     setEnabled(false)
                     val success = PluginManager.deleteAllPluginFiles()
@@ -128,7 +133,10 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(context, "All plugin files deleted? $success", Toast.LENGTH_SHORT).show()
                         setEnabled(true)
-                        preferences.edit().putBoolean(pref.key, false).apply()
+                        preferences.edit()
+                            .putBoolean(pref.key, false)
+                            .putStringSet("EXTENSIONS", emptySet<String>())
+                            .apply()
                     }
                 }
 
@@ -138,41 +146,27 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
 
     }
 
+    fun restartApp(context: Application) {
+        val packageManager = context.packageManager
+        val intent = packageManager.getLaunchIntentForPackage(context.packageName)
+        val componentName = intent?.component
+        if (componentName != null) {
+            val restartIntent = Intent.makeRestartActivityTask(componentName)
+            context.startActivity(restartIntent)
+            Runtime.getRuntime().exit(0) // kill old process after scheduling restart
+        }
+    }
+
+
+
     override val baseUrl: String = ""
     override val supportsLatest: Boolean = false
-    override fun animeDetailsParse(response: Response): SAnime {
-        TODO("Not yet implemented")
-    }
-
-    override fun episodeListParse(response: Response): List<SEpisode> {
-        TODO("Not yet implemented")
-    }
-
-    override fun latestUpdatesParse(response: Response): AnimesPage {
-        TODO("Not yet implemented")
-    }
-
-    override fun latestUpdatesRequest(page: Int): Request {
-        TODO("Not yet implemented")
-    }
-
-    override fun popularAnimeParse(response: Response): AnimesPage {
-        TODO("Not yet implemented")
-    }
-
-    override fun popularAnimeRequest(page: Int): Request {
-        TODO("Not yet implemented")
-    }
-
-    override fun searchAnimeParse(response: Response): AnimesPage {
-        TODO("Not yet implemented")
-    }
-
-    override fun searchAnimeRequest(
-        page: Int,
-        query: String,
-        filters: AnimeFilterList,
-    ): Request {
-        TODO("Not yet implemented")
-    }
+    override fun animeDetailsParse(response: Response): SAnime = throw UnsupportedOperationException()
+    override fun episodeListParse(response: Response): List<SEpisode> = throw UnsupportedOperationException()
+    override fun latestUpdatesParse(response: Response): AnimesPage = throw UnsupportedOperationException()
+    override fun latestUpdatesRequest(page: Int): Request = throw UnsupportedOperationException()
+    override fun popularAnimeParse(response: Response): AnimesPage = throw UnsupportedOperationException()
+    override fun popularAnimeRequest(page: Int): Request = throw UnsupportedOperationException()
+    override fun searchAnimeParse(response: Response): AnimesPage = throw UnsupportedOperationException()
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request  = throw UnsupportedOperationException()
 }

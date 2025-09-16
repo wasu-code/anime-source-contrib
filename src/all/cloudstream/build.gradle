@@ -7,14 +7,11 @@ ext {
 apply from: "$rootDir/common.gradle"
 
 dependencies {
-    // NiceHttp (match CS3 app)
+    //// CloudStream dependencies
     implementation "com.github.Blatzar:NiceHttp:0.4.13"
-
     // NOTE: Keep Jackson pinned, newer versions break old Androids
     implementation "com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1"
-
     implementation("org.mozilla:rhino:1.8.0")
-
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.6")
     implementation("com.uwetrottmann.tmdb2:tmdb-java:2.11.0")

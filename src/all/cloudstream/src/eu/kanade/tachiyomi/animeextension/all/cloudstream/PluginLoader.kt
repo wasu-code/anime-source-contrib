@@ -14,26 +14,10 @@ import java.io.File
 import java.io.InputStreamReader
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 
+
 object PluginLoader {
     private const val PLUGIN_FOLDER = "cloudstream"
     private val handler by lazy { Handler(Looper.getMainLooper()) }
-
-//    private fun copyIfNeeded(src: File, dest: File) {
-//        if (!dest.exists() ||
-//            src.length() != dest.length() ||
-//            src.lastModified() != dest.lastModified()
-//        ) {
-//            // Make it writable if it exists
-//            if (dest.exists() && !dest.canWrite()) {
-//                dest.setWritable(true)
-//            }
-//
-//            src.copyTo(dest, overwrite = true)
-//            dest.setLastModified(src.lastModified())
-//        }
-//        // Make sure file is read-only (for Android 14+ to read dex files)
-//        dest.setReadOnly()
-//    }
 
     fun loadPlugin(context: Application, file: File): Boolean {
         try {
@@ -53,7 +37,6 @@ object PluginLoader {
                             Toast.makeText(context, "Plugin ${manifest.name} not yet supported", Toast.LENGTH_SHORT).show()
                         }
 //                        pluginInstance.load(context) // skip openSettings here
-                        return false
                     } else {
                         pluginInstance.load()
                     }
@@ -69,7 +52,6 @@ object PluginLoader {
     }
 
     fun loadAllPlugins(context: Application): List<MainAPI> {
-//        val externalDir = File(context.getExternalFilesDir(null), PLUGIN_FOLDER)
         val internalDir = File(context.filesDir, PLUGIN_FOLDER)
         if (!internalDir.exists()) internalDir.mkdirs()
 
@@ -79,7 +61,6 @@ object PluginLoader {
 
         pluginFiles.forEach { src ->
             val dest = File(internalDir, src.name)
-//            copyIfNeeded(src, dest)
             loadPlugin(context,dest)
         }
 
