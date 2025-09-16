@@ -1,9 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.all.cloudstream
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.app.Application
-import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.widget.Toast
@@ -29,8 +27,8 @@ import kotlinx.coroutines.withContext
 
 
 class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
-    override val lang: String = "all"
-    override val name: String = "CloudStream Settings"
+    override val lang: String = "none"
+    override val name: String = "! CloudStream Settings"
 
     private val context = Injekt.get<Application>()
     private val preferences: SharedPreferences by lazy {
@@ -47,16 +45,16 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             }.distinctBy { it.url }
 
             // Filter plugins
-//            val selectedStatuses = preferences.getStringSet("FILTER_STATUS2", emptySet())
-//                ?.map { it.toInt() }
-//                ?: emptyList()
+            val selectedStatuses = preferences.getStringSet("FILTER_STATUS2", emptySet())
+                ?.map { it.toInt() }
+                ?: emptyList()
 
             val selectedTvTypes = preferences.getStringSet("FILTER_TVTYPE", emptySet()) ?: emptySet()
 
             val filteredPlugins = plugins.filter { plugin ->
-//                val matchesStatus = selectedStatuses.isEmpty() || selectedStatuses.contains(plugin.status)
+                val matchesStatus = selectedStatuses.isEmpty() || selectedStatuses.contains(plugin.status)
                 val matchesTvType = selectedTvTypes.isEmpty() || plugin.tvTypes?.any { it in selectedTvTypes } == true
-                matchesTvType
+                matchesStatus && matchesTvType
             }
 
             // Set
@@ -83,6 +81,9 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             title = "Choose plugins to install/uninstall"
             summary = "Loading..."
             dialogTitle = "Check/uncheck plugins to install/uninstall"
+            entries = emptyArray()
+            entryValues = emptyArray()
+            setDefaultValue(emptySet<String>())
             setEnabled(false)
             setOnPreferenceChangeListener { pref, newValue ->
                 preferences.edit()
@@ -153,17 +154,30 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             title = "Filter by type"
             entries = TvType.values().map {it.name}.toTypedArray()
             entryValues = TvType.values().map {it.name}.toTypedArray()
+            setDefaultValue(TvType.values().map {it.name}.toSet())
             setOnPreferenceChangeListener { _, newValue ->
+                preferences.edit()
+                    .putStringSet(key, newValue as Set<String>)
+                    .commit()
                 reloadExtensions(pluginsPref)
                 true
             }
         }.also(screen::addPreference)
 
-//        MultiSelectListPreference(screen.context).apply {
-//            key = "FILTER_STATUS2"
-//            entries = arrayOf("All", "Down", "Ok", "Slow", "Beta")
-//            entryValues = arrayOf("-1", "0", "1", "2", "3")
-//        }.also(screen::addPreference)
+        MultiSelectListPreference(screen.context).apply {
+            key = "FILTER_STATUS2"
+            title = "Filter by status"
+            entries = arrayOf("Down", "Ok", "Slow", "Beta")
+            entryValues = arrayOf("0", "1", "2", "3")
+            setDefaultValue(setOf("0", "1", "2", "3"))
+            setOnPreferenceChangeListener { _, newValue ->
+                preferences.edit()
+                    .putStringSet(key, newValue as Set<String>)
+                    .commit()
+                reloadExtensions(pluginsPref)
+                true
+            }
+        }.also(screen::addPreference)
 
 
         SwitchPreferenceCompat(screen.context).apply {
@@ -185,7 +199,7 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
                         preferences.edit()
                             .putBoolean(pref.key, false)
                             .putStringSet("EXTENSIONS", emptySet<String>())
-                            .apply()
+                            .commit()
                     }
                 }
 
