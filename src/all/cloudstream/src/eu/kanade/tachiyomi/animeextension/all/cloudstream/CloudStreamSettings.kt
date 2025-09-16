@@ -11,6 +11,7 @@ import androidx.preference.EditTextPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
+import com.lagradost.cloudstream3.TvType
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -36,22 +37,46 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
 
+    private fun reloadExtensions(pluginsPref: MultiSelectListPreference, newRepos: List<String>? = null) {
+        val repos = newRepos ?: preferences.getString("REPOS", "")?.lines()?.filter { it.isNotBlank() } ?: emptyList()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            // Load plugins from repos
+            val plugins = repos.flatMap { repo ->
+                RepositoryManager(arrayOf(repo)).getRepoPlugins(repo)
+            }.distinctBy { it.url }
+
+            // Filter plugins
+//            val selectedStatuses = preferences.getStringSet("FILTER_STATUS2", emptySet())
+//                ?.map { it.toInt() }
+//                ?: emptyList()
+
+            val selectedTvTypes = preferences.getStringSet("FILTER_TVTYPE", emptySet()) ?: emptySet()
+
+            val filteredPlugins = plugins.filter { plugin ->
+//                val matchesStatus = selectedStatuses.isEmpty() || selectedStatuses.contains(plugin.status)
+                val matchesTvType = selectedTvTypes.isEmpty() || plugin.tvTypes?.any { it in selectedTvTypes } == true
+                matchesTvType
+            }
+
+            // Set
+            withContext(Dispatchers.Main) {
+                if (filteredPlugins.isEmpty()) {
+                    pluginsPref.summary = "No plugins available"
+                    pluginsPref.setEnabled(false)
+                } else {
+                    pluginsPref.entries = filteredPlugins.map { it.name }.toTypedArray()
+                    pluginsPref.entryValues = filteredPlugins.map { it.url }.toTypedArray()
+                    pluginsPref.summary = "Showing ${filteredPlugins.size} plugins"
+                    pluginsPref.setEnabled(true)
+                }
+            }
+        }
+    }
+
+
     @SuppressLint("ApplySharedPref")
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
-
-        // --- Repo URLs input ---
-        EditTextPreference(screen.context).apply {
-            key = "REPOS"
-            title = "Plugin repositories"
-            dialogMessage = "CloudStream repositories (one per line):"
-            summary = "${preferences.getString("REPOS", "")?.lines()?.filter { it.isNotBlank() }?.size} repo(s) added"
-            setDefaultValue("")
-        }.also(screen::addPreference)
-
-//        EditTextPreference(screen.context).apply {
-//            summary = "Filters"
-//            setEnabled(false)
-//        }.also(screen::addPreference)
 
         val pluginsPref = MultiSelectListPreference(screen.context).apply {
             key = "EXTENSIONS"
@@ -95,27 +120,47 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             }
         }
 
+        EditTextPreference(screen.context).apply {
+            key = "REPOS"
+            title = "Plugin repositories"
+            dialogMessage = "CloudStream repositories (one per line):"
+            summary = "${preferences.getString("REPOS", "")?.lines()?.filter { it.isNotBlank() }?.size} repo(s) added"
+            setDefaultValue("")
+            setOnPreferenceChangeListener { _, newValue ->
+                val newRepos = (newValue as String).lines().filter { it.isNotBlank() }
+                reloadExtensions( pluginsPref, newRepos) // refresh EXTENSIONS
+                summary = "${newRepos.size} repo(s) added"
+                true
+            }
+        }.also(screen::addPreference)
+
         screen.addPreference(pluginsPref)  // add it first, we'll populate later
 
-        // Launch coroutine to fetch plugins from repos
-        CoroutineScope(Dispatchers.IO).launch {
-            val repos = preferences.getString("REPOS", "")?.lines()?.filter { it.isNotBlank() } ?: emptyList()
-            val plugins = repos.flatMap { repo ->
-                RepositoryManager(arrayOf(repo)).getRepoPlugins(repo)
-            }.distinctBy { it.url }
+        // Initial load of plugins list
+        reloadExtensions( pluginsPref)
 
-            withContext(Dispatchers.Main) {
-                if (plugins.isEmpty()) {
-                    pluginsPref.summary = "No plugins available"
-                } else {
-                    pluginsPref.entries = plugins.map { it.name }.toTypedArray()
-                    pluginsPref.entryValues = plugins.map { it.url }.toTypedArray()
+        EditTextPreference(screen.context).apply {
+            summary = "Filters"
+            setEnabled(false)
+        }.also(screen::addPreference)
 
-                    pluginsPref.summary = "Showing ${plugins.size} plugins"
-                    pluginsPref.setEnabled(true)
-                }
+        MultiSelectListPreference(screen.context).apply {
+            key = "FILTER_TVTYPE"
+            title = "Filter by type"
+            entries = TvType.values().map {it.name}.toTypedArray()
+            entryValues = TvType.values().map {it.name}.toTypedArray()
+            setOnPreferenceChangeListener { _, newValue ->
+                reloadExtensions(pluginsPref)
+                true
             }
-        }
+        }.also(screen::addPreference)
+
+//        MultiSelectListPreference(screen.context).apply {
+//            key = "FILTER_STATUS2"
+//            entries = arrayOf("All", "Down", "Ok", "Slow", "Beta")
+//            entryValues = arrayOf("-1", "0", "1", "2", "3")
+//        }.also(screen::addPreference)
+
 
         SwitchPreferenceCompat(screen.context).apply {
             key = "PLUGINS_PURGE"
