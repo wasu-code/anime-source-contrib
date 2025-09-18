@@ -32,11 +32,13 @@ object PluginLoader {
                     val pluginInstance = pluginClass.getDeclaredConstructor().newInstance() as BasePlugin
 
                     if (pluginInstance is Plugin) {
-                        Log.d("CloudStream","Plugin skipped (Plugin class not yet supported) $file")
-                        handler.post {
-                            Toast.makeText(context, "Plugin ${manifest.name} not yet supported", Toast.LENGTH_SHORT).show()
+                        Log.d("CloudStream","Class Plugin not yet fully supported: ${manifest.name} ($file)")
+
+                        val hasOpenSettings = pluginInstance.openSettings != null
+                        hasOpenSettings && handler.post {
+                            Toast.makeText(context, "Plugin ${manifest.name} not supported", Toast.LENGTH_SHORT).show()
                         }
-//                        pluginInstance.load(context) // skip openSettings here
+                        pluginInstance.load(context)
                     } else {
                         pluginInstance.load()
                     }
