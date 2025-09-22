@@ -21,11 +21,13 @@ data class SitePlugin(
     val description: String? = null,
     val status: Int = 1,                // plugin status (0=down, 1=ok, 2=slow, 3=beta)
     val internalName: String,
+    val repositoryUrl: String?,
+    // These types are yet to be mapped and used
     val tvTypes: List<String>? = null,
     val language: String? = null
 )
 
-class RepositoryManager(private val repositories: Array<String>) {
+object RepositoryManager {
 
     private val json = Json { ignoreUnknownKeys = true }
 
