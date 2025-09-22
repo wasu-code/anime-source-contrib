@@ -35,8 +35,12 @@ class MainApiAdapter(
         if (!api.hasMainPage) throw UnsupportedOperationException("This extension doesn't have main page")
 
         return runBlocking {
-            api.getMainPage(page, MainPageRequest("popular", baseUrl, false))
-                ?.toAnimePage() as AnimesPage
+            try {
+                api.getMainPage(page, MainPageRequest("popular", baseUrl, false))
+                    ?.toAnimePage() as AnimesPage
+            } catch (e: NotImplementedError) {
+                throw UnsupportedOperationException("Not implemented")
+            }
         }
     }
 
@@ -51,7 +55,11 @@ class MainApiAdapter(
         filters: AnimeFilterList
     ): AnimesPage {
         return runBlocking {
-            api.search(query, page)?.toAnimePage() ?: AnimesPage(emptyList(), false)
+            try {
+                api.search(query, page)?.toAnimePage() ?: AnimesPage(emptyList(), false)
+            } catch (e: NotImplementedError) {
+                throw UnsupportedOperationException("Not implemented")
+            }
         }
     }
 
@@ -66,7 +74,13 @@ class MainApiAdapter(
     // === Anime Details ===
 
     override suspend fun getAnimeDetails(anime: SAnime): SAnime {
-        val details = runBlocking { api.load(anime.url) }
+        val details = runBlocking {
+            try{
+                api.load(anime.url)
+            } catch (e: NotImplementedError) {
+                throw UnsupportedOperationException("Not implemented")
+            }
+        }
         return details?.toSAnime() ?: SAnime.create()
     }
 
@@ -75,7 +89,13 @@ class MainApiAdapter(
     // === Episode List ===
 
     override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> {
-        val loadResponse = runBlocking { api.load(anime.url) }
+        val loadResponse = runBlocking {
+            try{
+                api.load(anime.url)
+            } catch (e: NotImplementedError) {
+                throw UnsupportedOperationException("Not implemented")
+            }
+        }
         return loadResponse?.toSEpisodeList() ?: emptyList()
     }
 
@@ -87,16 +107,20 @@ class MainApiAdapter(
         val videos = mutableListOf<Video>()
         val subs = mutableListOf<Track>()
         runBlocking {
-            api.loadLinks(
-                episode.url,
-                isCasting = false,
-                subtitleCallback = { subtitleFile ->
-                    subs.add(subtitleFile.toTrack())
-                },
-                callback = { extractorLink ->
-                    videos.add(extractorLink.toVideo())
-                }
-            )
+            try{
+                api.loadLinks(
+                    episode.url,
+                    isCasting = false,
+                    subtitleCallback = { subtitleFile ->
+                        subs.add(subtitleFile.toTrack())
+                    },
+                    callback = { extractorLink ->
+                        videos.add(extractorLink.toVideo())
+                    }
+                )
+            } catch (e: NotImplementedError) {
+                throw UnsupportedOperationException("Not implemented")
+            }
         }
         return videos
     }
