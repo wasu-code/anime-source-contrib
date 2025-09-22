@@ -9,11 +9,10 @@ import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.plugins.BasePlugin
 import com.lagradost.cloudstream3.plugins.Plugin
+import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import dalvik.system.PathClassLoader
 import java.io.File
 import java.io.InputStreamReader
-import com.lagradost.cloudstream3.utils.AppUtils.parseJson
-
 
 object PluginLoader {
     private const val PLUGIN_FOLDER = "cloudstream"

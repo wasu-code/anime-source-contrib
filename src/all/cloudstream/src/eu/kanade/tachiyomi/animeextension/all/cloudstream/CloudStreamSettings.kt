@@ -63,7 +63,9 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
                     pluginsPref.summary = "No plugins available"
                     pluginsPref.setEnabled(false)
                 } else {
-                    pluginsPref.entries = filteredPlugins.map { it.name }.toTypedArray()
+                    pluginsPref.entries = filteredPlugins.map {
+                        "${it.name} (${it.language?.uppercase() ?: "ALL"})" + (it.description.takeIf { d -> d != it.name }?.let { "\nⓘ $it" } ?: "")
+                    }.toTypedArray()
                     pluginsPref.entryValues = filteredPlugins.map { it.url }.toTypedArray()
                     pluginsPref.summary = "Showing ${filteredPlugins.size} plugins"
                     pluginsPref.setEnabled(true)
@@ -71,7 +73,6 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             }
         }
     }
-
 
     @SuppressLint("ApplySharedPref")
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
@@ -179,6 +180,10 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             }
         }.also(screen::addPreference)
 
+        EditTextPreference(screen.context).apply {
+            summary = "Advanced"
+            setEnabled(false)
+        }.also(screen::addPreference)
 
         SwitchPreferenceCompat(screen.context).apply {
             key = "PLUGINS_PURGE"

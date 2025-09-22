@@ -23,7 +23,10 @@ class MainApiAdapter(
 
     override val name: String = api.name
     override val baseUrl: String = api.mainUrl
-    override val lang: String = api.lang
+    override val lang: String = when (api.lang) {
+        "un" -> "all"
+        else -> api.lang
+    }
     override val supportsLatest: Boolean = false
 
     // === Popular Anime ===
