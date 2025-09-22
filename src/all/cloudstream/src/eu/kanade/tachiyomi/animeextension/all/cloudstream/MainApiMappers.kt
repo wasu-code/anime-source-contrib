@@ -57,14 +57,24 @@ fun ShowStatus.toStatus(): Int {
 
 fun LoadResponse.toSEpisodeList(): List<SEpisode> {
     return when (this) {
-        is AnimeLoadResponse -> episodes.values.flatten().map { ep: Episode ->
+        is AnimeLoadResponse -> episodes.values.flatten()
+            .sortedWith(
+                compareByDescending<Episode> { it.season ?: Int.MIN_VALUE }
+                .thenByDescending { it.episode ?: Int.MIN_VALUE }
+            ).map { ep: Episode ->
             SEpisode.create().apply {
                 name = ep.name ?: "Untitled"
                 url = ep.data
+                ep.episode?.let { episode_number = it.toFloat() }
+                ep.date?.let { date_upload = it }
             }
         }
 
-        is TvSeriesLoadResponse -> episodes.map { ep: Episode ->
+        is TvSeriesLoadResponse -> episodes
+            .sortedWith(
+                compareByDescending<Episode> { it.season ?: Int.MIN_VALUE }
+                .thenByDescending { it.episode ?: Int.MIN_VALUE }
+            ).map { ep: Episode ->
             SEpisode.create().apply {
                 name = ep.name ?: "Untitled"
                 url = ep.data
