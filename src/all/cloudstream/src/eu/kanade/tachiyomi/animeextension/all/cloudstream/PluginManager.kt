@@ -48,6 +48,8 @@ object PluginManager {
         extensionsDir.mkdirs()
     }
 
+    fun getPluginCount(): Int = extensionsDir.listFiles()?.size ?: 0
+
     private fun write(stream: InputStream, output: OutputStream) {
         val input = BufferedInputStream(stream)
         val dataBuffer = ByteArray(512)

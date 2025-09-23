@@ -10,6 +10,7 @@ import androidx.preference.EditTextPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
+import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.TvType
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -25,6 +26,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.collections.flatMap
+import kotlin.collections.ifEmpty
 
 
 class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
@@ -34,91 +37,6 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
     private val context = Injekt.get<Application>()
     private val preferences: SharedPreferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
-    }
-
-    private fun getRepos(): List<String> =
-        preferences.getString("REPOS", "")
-            ?.lines()
-            ?.filter { it.isNotBlank() }
-            .orEmpty()
-
-    private fun getSelectedRepos(): Set<String> =
-        preferences.getStringSet("FILTER_REPO2", emptySet()) ?: emptySet()
-
-    private fun getSelectedTypes(): Set<String> =
-        preferences.getStringSet("FILTER_TVTYPE", TvType.values().map { it.name }.toSet())
-            ?: emptySet()
-
-    private fun getSelectedStatus(): Set<String> =
-        preferences.getStringSet("FILTER_STATUS2", setOf("0","1","2","3"))
-            ?: emptySet()
-
-    private fun getSelectedLanguages(): Set<String> =
-        preferences.getStringSet("FILTER_LANGUAGE", emptySet()) ?: emptySet()
-
-
-    private fun applyFilters(
-        pluginsPref: MultiSelectListPreference,
-        repoFilterPref: MultiSelectListPreference? = null,
-        langFilterPref: MultiSelectListPreference? = null,
-    ) {
-        val allRepos = getRepos()
-        val selectedRepos = getSelectedRepos()
-        val selectedTypes = getSelectedTypes()
-        val selectedStatus = getSelectedStatus()
-        val selectedLangs = getSelectedLanguages()
-
-        val repos = selectedRepos.ifEmpty { allRepos }
-
-        // refresh FILTER_REPO2 entries dynamically
-        repoFilterPref?.apply {
-            entries = allRepos.map { Uri.parse(it).path?.trimStart('/') ?: it }.toTypedArray()
-            entryValues = allRepos.toTypedArray()
-            setEnabled(allRepos.isNotEmpty())
-        }
-
-        CoroutineScope(Dispatchers.IO).launch {
-            // Load plugins from repos
-            val allPlugins = repos.flatMap { repoUrl ->
-                RepositoryManager.getRepoPlugins(repoUrl)
-            }.distinctBy { it.url}
-
-            // refresh FILTER_LANGUAGE dynamically from all plugins
-            langFilterPref?.apply {
-                val langs = allPlugins
-                    .mapNotNull { it.language }        // drop nulls
-                    .filter { it.isNotBlank() }        // drop empty/blank strings
-                    .distinct()
-                    .sorted()
-
-                entries = langs.toTypedArray()
-                entryValues = langs.toTypedArray()
-                setDefaultValue(langs.toSet())
-                setEnabled(langs.isNotEmpty())
-            }
-
-            // filtering logic
-            val filteredPlugins = allPlugins.filter { plugin ->
-                (plugin.tvTypes.isNullOrEmpty() || plugin.tvTypes.any { it in selectedTypes }) &&
-                (plugin.status.toString() in selectedStatus) &&
-                (selectedLangs.isEmpty() || plugin.language.isNullOrBlank() || plugin.language in selectedLangs)
-            }
-
-            // Set
-            withContext(Dispatchers.Main) {
-                if (filteredPlugins.isEmpty()) {
-                    pluginsPref.summary = "No plugins available"
-                    pluginsPref.setEnabled(false)
-                } else {
-                    pluginsPref.entries = filteredPlugins.map {
-                        "${it.name} (${it.language?.uppercase() ?: "ALL"})" + (it.description.takeIf { d -> d != it.name }?.let { "\n    ⓘ $it" } ?: "")
-                    }.toTypedArray()
-                    pluginsPref.entryValues = filteredPlugins.map { it.url }.toTypedArray()
-                    pluginsPref.summary = "Showing ${filteredPlugins.size} plugins"
-                    pluginsPref.setEnabled(true)
-                }
-            }
-        }
     }
 
     @SuppressLint("ApplySharedPref")
@@ -133,49 +51,12 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             entryValues = emptyArray()
             setDefaultValue(emptySet<String>())
             setEnabled(false)
-            setOnPreferenceChangeListener { pref, newValue ->
-                preferences.edit()
-                    .putStringSet(pref.key, newValue as Set<String>)
-                    .commit() // save now because app restarts later
-
-                val selected = newValue
-                val oldSelected = (pref as MultiSelectListPreference).values
-                val removed = oldSelected - selected
-                val added = selected - oldSelected
-
-                // Disable temporarily
-                pref.setEnabled(false)
-
-                val scope = CoroutineScope(Dispatchers.IO)
-
-                scope.launch {
-                    // Install
-                    added.forEach { pluginUrl ->
-                        val pluginFile = PluginManager.downloadPluginToFile(pluginUrl)
-                        // validate if plugin loads
-                        if (pluginFile != null) {
-                            PluginLoader.loadPlugin(context, pluginFile)
-                        }
-                    }
-
-                    // Remove
-                    removed.forEach { pluginUrl ->
-                        PluginManager.deletePluginFile(pluginUrl)
-                    }
-
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Installed ${added.size}, removed ${removed.size} plugins", Toast.LENGTH_SHORT).show()
-                        setEnabled(true)
-                        restartApp(context)
-                    }
-                }
-                true
-            }
         }
 
         val repoFilterPref = MultiSelectListPreference(screen.context).apply {
             key = "FILTER_REPO2"
             title = "Filter by repository"
+            summary = "${preferences.getStringSet(key, emptySet())?.size} repo(s) selected"
             entries = emptyArray()
             entryValues = emptyArray()
             setDefaultValue(emptySet<String>())
@@ -187,32 +68,14 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             entries = emptyArray()
             entryValues = emptyArray()
             setDefaultValue(emptySet<String>())
-            setOnPreferenceChangeListener { _, newValue ->
-                preferences.edit().putStringSet(key, newValue as Set<String>).commit()
-                applyFilters(pluginsPref, repoFilterPref, this)
-                true
-            }
-        }
-
-        repoFilterPref.setOnPreferenceChangeListener { pref, newValue ->
-            preferences.edit().putStringSet(pref.key, newValue as Set<String>).commit()
-            applyFilters(pluginsPref, repoFilterPref, langFilterPref)
-            true
         }
 
         val reposPref = EditTextPreference(screen.context).apply {
             key = "REPOS"
             title = "Plugin repositories"
             dialogMessage = "CloudStream repositories (one per line):"
-            summary = "${preferences.getString("REPOS", "")?.lines()?.filter { it.isNotBlank() }?.size} repo(s) added"
+            summary = "${preferences.getString(key, "")?.lines()?.filter { it.isNotBlank() }?.size} repo(s) added"
             setDefaultValue("")
-            setOnPreferenceChangeListener { _, newValue ->
-                val newRepos = (newValue as String).lines().filter { it.isNotBlank() }
-                preferences.edit().putString(key, newValue).commit()
-                applyFilters(pluginsPref, repoFilterPref, langFilterPref) // refresh EXTENSIONS
-                summary = "${newRepos.size} repo(s) added"
-                true
-            }
         }
 
         val tvTypesFilterPref = MultiSelectListPreference(screen.context).apply {
@@ -221,13 +84,7 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             entries = TvType.values().map {it.name}.toTypedArray()
             entryValues = TvType.values().map {it.name}.toTypedArray()
             setDefaultValue(TvType.values().map {it.name}.toSet())
-            setOnPreferenceChangeListener { _, newValue ->
-                preferences.edit()
-                    .putStringSet(key, newValue as Set<String>)
-                    .commit()
-                applyFilters(pluginsPref, repoFilterPref, langFilterPref)
-                true
-            }
+            summary = "${preferences.getStringSet(key, emptySet())?.size}/${entries.size} selected"
         }
 
         val statusFilterPref = MultiSelectListPreference(screen.context).apply {
@@ -236,13 +93,104 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             entries = arrayOf("Down", "Ok", "Slow", "Beta")
             entryValues = arrayOf("0", "1", "2", "3")
             setDefaultValue(setOf("0", "1", "2", "3"))
-            setOnPreferenceChangeListener { _, newValue ->
-                preferences.edit()
-                    .putStringSet(key, newValue as Set<String>)
-                    .commit()
-                applyFilters(pluginsPref, repoFilterPref, langFilterPref)
-                true
+            summary = "${preferences.getStringSet(key, emptySet())?.size}/${entries.size} selected"
+        }
+
+        val fm = FilterManager(preferences, pluginsPref, repoFilterPref, langFilterPref)
+
+        // Change Listeners
+        pluginsPref.setOnPreferenceChangeListener { pref, newValue ->
+            preferences.edit()
+                .putStringSet(pref.key, newValue as Set<String>)
+                .commit() // save now because app restarts later
+
+            val selected = newValue
+            val oldSelected = (pref as MultiSelectListPreference).values
+            val removed = oldSelected - selected
+            val added = selected - oldSelected
+
+            // Disable temporarily
+            pref.setEnabled(false)
+
+            val scope = CoroutineScope(Dispatchers.IO)
+
+            scope.launch {
+                // Install
+                added.forEach { pluginUrl ->
+                    val pluginFile = PluginManager.downloadPluginToFile(pluginUrl)
+                    // validate if plugin loads
+                    if (pluginFile != null) {
+                        PluginLoader.loadPlugin(context, pluginFile)
+                    }
+                }
+
+                // Remove
+                removed.forEach { pluginUrl ->
+                    PluginManager.deletePluginFile(pluginUrl)
+                }
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Installed ${added.size}, removed ${removed.size} plugins", Toast.LENGTH_SHORT).show()
+                    pref.setEnabled(true)
+                    restartApp(context)
+                }
             }
+            true
+        }
+
+        repoFilterPref.setOnPreferenceChangeListener { pref, newValue ->
+            val newSelection = (newValue as Set<String>).intersect(fm.getRepos()) // exclude repos that were selected but removed
+            preferences.edit().putStringSet(pref.key, newSelection as Set<String>).commit()
+            fm.applyFilters()
+            pref.summary = "${newSelection.size} repo(s) selected"
+            true
+        }
+
+        langFilterPref.setOnPreferenceChangeListener { pref, newValue ->
+            preferences.edit().putStringSet(pref.key, newValue as Set<String>).commit()
+            fm.applyFilters()
+            pref.summary = "${newValue.size}/${(pref as MultiSelectListPreference).entries.size} selected"
+            true
+        }
+
+        reposPref.setOnPreferenceChangeListener { pref, newValue ->
+            val newRepos = (newValue as String).lines().filter { it.isNotBlank() }.toSet()
+            val oldRepos = preferences.getString("REPOS", "")
+                ?.lines()
+                ?.filter { it.isNotBlank() }
+                .orEmpty()
+                .toSet()
+
+            preferences.edit().putString(pref.key, newValue).commit()
+
+            val selectedRepos = preferences.getStringSet("FILTER_REPO2", emptySet())?.toMutableSet() ?: mutableSetOf()
+            val added = newRepos - oldRepos
+            selectedRepos.addAll(added)
+            val removed = oldRepos - newRepos
+            selectedRepos.removeAll(removed)
+            preferences.edit().putStringSet("FILTER_REPO2", selectedRepos).commit()
+
+            fm.applyFilters()
+            pref.summary = "${newRepos.size} repo(s) added"
+            true
+        }
+
+        tvTypesFilterPref.setOnPreferenceChangeListener { pref, newValue ->
+            preferences.edit()
+                .putStringSet(pref.key, newValue as Set<String>)
+                .commit()
+            fm.applyFilters()
+            pref.summary = "${newValue.size}/${(pref as MultiSelectListPreference).entries.size} selected"
+            true
+        }
+
+        statusFilterPref.setOnPreferenceChangeListener { pref, newValue ->
+            preferences.edit()
+                .putStringSet(pref.key, newValue as Set<String>)
+                .commit()
+            fm.applyFilters()
+            pref.summary = "${newValue.size}/${(pref as MultiSelectListPreference).entries.size} selected"
+            true
         }
 
         // Add preferences to screen
@@ -262,12 +210,13 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
         }.also(screen::addPreference)
 
         // Initial load of plugins list
-        applyFilters( pluginsPref, repoFilterPref, langFilterPref )
+        fm.applyFilters()
 
         SwitchPreferenceCompat(screen.context).apply {
             key = "PLUGINS_PURGE"
             title = "Purge all plugin files"
             setDefaultValue(false)
+            summary = "${PluginManager.getPluginCount()} plugin(s) installed, ${APIHolder.allProviders.size} provider(s) loaded"
             setOnPreferenceClickListener { pref ->
                 val switchPref = pref as SwitchPreferenceCompat
                 switchPref.isChecked = false
@@ -291,8 +240,16 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             }
         }.also(screen::addPreference)
 
+        //TODO button to remove plugins from removed repos
+        SwitchPreferenceCompat(screen.context).apply {
+            title = "Remove orphaned plugins"
+            summary = "Will delete files that not listed in added repos"
+            setEnabled(false)
+        }.also(screen::addPreference)
+
     }
 
+    /** Restart host application to force it to reload all plugins */
     fun restartApp(context: Application) {
         val packageManager = context.packageManager
         val intent = packageManager.getLaunchIntentForPackage(context.packageName)
@@ -305,7 +262,7 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
 
-
+    // Unused
     override val baseUrl: String = ""
     override val supportsLatest: Boolean = false
     override fun animeDetailsParse(response: Response): SAnime = throw UnsupportedOperationException()
@@ -316,4 +273,96 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
     override fun popularAnimeRequest(page: Int): Request = throw UnsupportedOperationException()
     override fun searchAnimeParse(response: Response): AnimesPage = throw UnsupportedOperationException()
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request  = throw UnsupportedOperationException()
+}
+
+class FilterManager(
+    private val preferences: SharedPreferences,
+    private val pluginsPref: MultiSelectListPreference,
+    private val repoFilterPref: MultiSelectListPreference,
+    private val langFilterPref: MultiSelectListPreference
+) {
+    private val scope = CoroutineScope(Dispatchers.IO)
+
+    fun getRepos(): Set<String> =
+        preferences.getString("REPOS", "")
+            ?.lines()
+            ?.filter { it.isNotBlank() }
+            .orEmpty()
+            .toSet()
+
+    private fun getSelectedRepos(): Set<String> =
+        preferences.getStringSet("FILTER_REPO2", emptySet()) ?: emptySet()
+
+    private fun getSelectedTypes(): Set<String> =
+        preferences.getStringSet("FILTER_TVTYPE", TvType.values().map { it.name }.toSet())
+            ?: emptySet()
+
+    private fun getSelectedStatus(): Set<String> =
+        preferences.getStringSet("FILTER_STATUS2", setOf("0","1","2","3"))
+            ?: emptySet()
+
+    private fun getSelectedLanguages(): Set<String> =
+        preferences.getStringSet("FILTER_LANGUAGE", emptySet()) ?: emptySet()
+
+    fun applyFilters() {
+        val allRepos = getRepos()
+        val selectedRepos = getSelectedRepos()
+        val selectedTypes = getSelectedTypes()
+        val selectedStatus = getSelectedStatus()
+        val selectedLangs = getSelectedLanguages()
+
+        val repos = selectedRepos.ifEmpty { allRepos }
+
+        // refresh FILTER_REPO2 entries dynamically
+        repoFilterPref.apply {
+            entries = allRepos.map { Uri.parse(it).path?.trimStart('/') ?: it }.toTypedArray()
+            entryValues = allRepos.toTypedArray()
+            values = selectedRepos
+            summary = "${selectedRepos.size} repo(s) selected"
+            setEnabled(allRepos.isNotEmpty())
+        }
+
+        scope.launch {
+            // Load plugins from repos
+            val allPlugins = repos.flatMap { repoUrl ->
+                RepositoryManager.getRepoPlugins(repoUrl)
+            }.distinctBy { it.url}
+
+            // refresh FILTER_LANGUAGE dynamically from all plugins
+            langFilterPref.apply {
+                val langs = allPlugins
+                    .mapNotNull { it.language }        // drop nulls
+                    .filter { it.isNotBlank() }        // drop empty/blank strings
+                    .distinct()
+                    .sorted()
+
+                entries = langs.toTypedArray()
+                entryValues = langs.toTypedArray()
+                setDefaultValue(langs.toSet())
+                setEnabled(langs.isNotEmpty())
+            }
+
+            // filtering logic
+            val filteredPlugins = allPlugins.filter { plugin ->
+                (plugin.tvTypes.isNullOrEmpty() || plugin.tvTypes.any { it in selectedTypes }) &&
+                    (plugin.status.toString() in selectedStatus) &&
+                    (selectedLangs.isEmpty() || plugin.language.isNullOrBlank() || plugin.language in selectedLangs)
+            }
+
+            // Set
+            withContext(Dispatchers.Main) {
+                if (filteredPlugins.isEmpty()) {
+                    pluginsPref.summary = "No plugins available"
+                    pluginsPref.setEnabled(false)
+                } else {
+                    pluginsPref.entries = filteredPlugins.map {
+                        "${it.name} (${it.language?.uppercase() ?: "ALL"})" + (it.description.takeIf { d -> d != it.name }?.let { "\n    ⓘ $it" } ?: "")
+                    }.toTypedArray()
+                    pluginsPref.entryValues = filteredPlugins.map { it.url }.toTypedArray()
+                    pluginsPref.summary = "Showing ${filteredPlugins.size} plugins"
+                    pluginsPref.setEnabled(true)
+                }
+            }
+        }
+    }
 }
