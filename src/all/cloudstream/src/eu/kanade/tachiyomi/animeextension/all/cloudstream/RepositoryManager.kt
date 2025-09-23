@@ -53,4 +53,8 @@ object RepositoryManager {
         val repo = parseRepository(repoUrl) ?: return emptyList()
         return repo.pluginLists.flatMap { parsePlugins(it) }
     }
+
+    suspend fun getAllPlugins(repos: Set<String>): List<SitePlugin> {
+        return repos.flatMap { getRepoPlugins(it) }.distinctBy { it.url}
+    }
 }

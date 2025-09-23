@@ -126,4 +126,8 @@ class MainApiAdapter(
     }
 
     override fun videoListParse(response: Response): List<Video> = throw UnsupportedOperationException()
+
+    override fun getAnimeUrl(anime: SAnime): String {
+        return if (anime.url.startsWith(baseUrl)) anime.url else super.getAnimeUrl(anime)
+    }
 }

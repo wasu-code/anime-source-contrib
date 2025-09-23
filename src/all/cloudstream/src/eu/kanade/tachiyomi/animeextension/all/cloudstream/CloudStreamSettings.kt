@@ -141,7 +141,7 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
         repoFilterPref.setOnPreferenceChangeListener { pref, newValue ->
             val newSelection = (newValue as Set<String>).intersect(fm.getRepos()) // exclude repos that were selected but removed
             preferences.edit().putStringSet(pref.key, newSelection as Set<String>).commit()
-            fm.applyFilters()
+            fm.reloadReposAndPlugins()
             pref.summary = "${newSelection.size} repo(s) selected"
             true
         }
@@ -170,7 +170,7 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
             selectedRepos.removeAll(removed)
             preferences.edit().putStringSet("FILTER_REPO2", selectedRepos).commit()
 
-            fm.applyFilters()
+            fm.reloadReposAndPlugins()
             pref.summary = "${newRepos.size} repo(s) added"
             true
         }
@@ -210,7 +210,7 @@ class CloudStreamSettings() : AnimeHttpSource(), ConfigurableAnimeSource {
         }.also(screen::addPreference)
 
         // Initial load of plugins list
-        fm.applyFilters()
+        fm.reloadReposAndPlugins()
 
         SwitchPreferenceCompat(screen.context).apply {
             key = "PLUGINS_PURGE"
@@ -283,6 +283,8 @@ class FilterManager(
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    @Volatile private var cachedPlugins: List<SitePlugin> = emptyList()
+
     fun getRepos(): Set<String> =
         preferences.getString("REPOS", "")
             ?.lines()
@@ -304,13 +306,11 @@ class FilterManager(
     private fun getSelectedLanguages(): Set<String> =
         preferences.getStringSet("FILTER_LANGUAGE", emptySet()) ?: emptySet()
 
-    fun applyFilters() {
+    /** Refetches SELECTED repos and updates plugins list */
+    fun reloadReposAndPlugins() {
+        pluginsPref.setEnabled(false)
         val allRepos = getRepos()
         val selectedRepos = getSelectedRepos()
-        val selectedTypes = getSelectedTypes()
-        val selectedStatus = getSelectedStatus()
-        val selectedLangs = getSelectedLanguages()
-
         val repos = selectedRepos.ifEmpty { allRepos }
 
         // refresh FILTER_REPO2 entries dynamically
@@ -323,16 +323,32 @@ class FilterManager(
         }
 
         scope.launch {
-            // Load plugins from repos
-            val allPlugins = repos.flatMap { repoUrl ->
-                RepositoryManager.getRepoPlugins(repoUrl)
-            }.distinctBy { it.url}
+            cachedPlugins = RepositoryManager.getAllPlugins(repos)
 
-            // refresh FILTER_LANGUAGE dynamically from all plugins
+            refreshFilters()
+        }
+    }
+
+    /** Call this on any filter change except REPOS */
+    fun applyFilters() {
+        scope.launch {
+            refreshFilters()
+        }
+    }
+
+    private suspend fun refreshFilters() {
+        val selectedTypes = getSelectedTypes()
+        val selectedStatus = getSelectedStatus()
+        val selectedLangs = getSelectedLanguages()
+
+        val allPlugins = cachedPlugins
+
+        // refresh FILTER_LANGUAGE dynamically
+        withContext(Dispatchers.Main) {
             langFilterPref.apply {
                 val langs = allPlugins
-                    .mapNotNull { it.language }        // drop nulls
-                    .filter { it.isNotBlank() }        // drop empty/blank strings
+                    .mapNotNull { it.language }
+                    .filter { it.isNotBlank() }
                     .distinct()
                     .sorted()
 
@@ -341,26 +357,30 @@ class FilterManager(
                 setDefaultValue(langs.toSet())
                 setEnabled(langs.isNotEmpty())
             }
+        }
 
-            // filtering logic
-            val filteredPlugins = allPlugins.filter { plugin ->
-                (plugin.tvTypes.isNullOrEmpty() || plugin.tvTypes.any { it in selectedTypes }) &&
-                    (plugin.status.toString() in selectedStatus) &&
-                    (selectedLangs.isEmpty() || plugin.language.isNullOrBlank() || plugin.language in selectedLangs)
-            }
+        // filtering logic
+        val filteredPlugins = allPlugins.filter { plugin ->
+            (plugin.tvTypes.isNullOrEmpty() || plugin.tvTypes.any { it in selectedTypes }) &&
+                (plugin.status.toString() in selectedStatus) &&
+                (selectedLangs.isEmpty() || plugin.language.isNullOrBlank() || plugin.language in selectedLangs)
+        }
 
-            // Set
-            withContext(Dispatchers.Main) {
-                if (filteredPlugins.isEmpty()) {
-                    pluginsPref.summary = "No plugins available"
-                    pluginsPref.setEnabled(false)
-                } else {
-                    pluginsPref.entries = filteredPlugins.map {
-                        "${it.name} (${it.language?.uppercase() ?: "ALL"})" + (it.description.takeIf { d -> d != it.name }?.let { "\n    ⓘ $it" } ?: "")
+        withContext(Dispatchers.Main) {
+            if (filteredPlugins.isEmpty()) {
+                pluginsPref.apply {
+                    summary = "No plugins available"
+                    setEnabled(false)
+                }
+            } else {
+                pluginsPref.apply {
+                    entries = filteredPlugins.map {
+                        "${it.name} (${it.language?.uppercase() ?: "ALL"})" +
+                            (it.description.takeIf { d -> d != it.name }?.let { "\n    ⓘ $it" } ?: "")
                     }.toTypedArray()
-                    pluginsPref.entryValues = filteredPlugins.map { it.url }.toTypedArray()
-                    pluginsPref.summary = "Showing ${filteredPlugins.size} plugins"
-                    pluginsPref.setEnabled(true)
+                    entryValues = filteredPlugins.map { it.url }.toTypedArray()
+                    summary = "Showing ${filteredPlugins.size} plugins"
+                    setEnabled(true)
                 }
             }
         }
